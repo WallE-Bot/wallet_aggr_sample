@@ -1,7 +1,7 @@
 const Web3 = require('web3');
 const fetch = require('node-fetch');
 const { ABI } = require('./ABI');
-const { fetchRate1Inch, fetchRateDEX } = require('./helpers');
+const { fetchRate1inch, fetchRateDEX } = require('./helpers');
 const { ADDRESS } = require('./address');
 const { INFURA } = require('./key');
 const { CONTRACT_NAMES, TOKEN_NAMES } = require('./constants');
@@ -75,7 +75,6 @@ class Assignment {
         await this.CONTRACTS[name]
           .methods.balanceOf(ADDRESS.USER_WALLET)
           .call((err, res) => {
-            console.log(err, res);
             walletBalance[name] = res;
             this.TOKEN_CALL_DATA[name]['amount'] = res;
           });
@@ -94,17 +93,20 @@ class Assignment {
   async get1inchSwapRates () {
     const batchedPromises = Object
       .entries(this.TOKEN_CALL_DATA)
-      .map(([key, value]) => fetchRate1Inch(...Object.values(value)))
+      .map(([key, value]) => fetchRate1inch(...Object.values(value)))
 
     const rates1inch = await Promise.all(batchedPromises);
 
-    return rates1Inch.reduce((rates, res) => {
+    return rates1inch.reduce((rates, res) => {
+      if (res.hasOwnProperty('statusCode')) { return rates; };
+
       const symbol = res.fromToken.symbol;
       const formatSymbol = symbol === 'KOGECOIN' ? 'KOGE' : symbol;
       const rate = res.toTokenAmount;
 
       // rates[formatSymbol] = web3.utils.fromWei(rate, 'ether');
       rates[formatSymbol] = rate;
+
       return rates;
     }, {});
   }
@@ -112,7 +114,7 @@ class Assignment {
   // => { [token]: rate }
   async getDEXSwapRates (DEX) {
     const batchedPromises = Object
-      .entries(TOKEN_CALL_DATA)
+      .entries(this.TOKEN_CALL_DATA)
       .map(([key, value]) =>  {
         const {
           amount: amountIn,
@@ -133,9 +135,9 @@ class Assignment {
 
   async populateTokenSwapRates () {
     try {
-      this.TOKEN_SWAP_RATES['1inch'] = await get1inchswapRates();
-      this.TOKEN_SWAP_RATES['Cafeswap'] = await getDEXSwapRates('CAFESWAP');
-      this.TOKEN_SWAP_RATES['ApeSwap'] = await getDEXSwapRates('APESWAP');
+      this.TOKEN_SWAP_RATES['1inch'] = await this.get1inchSwapRates();
+      this.TOKEN_SWAP_RATES['Cafeswap'] = await this.getDEXSwapRates('CAFESWAP');
+      this.TOKEN_SWAP_RATES['ApeSwap'] = await this.getDEXSwapRates('APESWAP');
     } catch(err) {
       console.error(
         `Unable to populate token rates`,
@@ -148,33 +150,37 @@ class Assignment {
     // for each token balance, for each exchange, get the max rate, store max values
     return Object
       .entries(this.WALLET_BALANCE)
-      .reduce(
-        (maxWalletValue, balanceEntry) => {
+      .reduce((maxWalletValue, balanceEntry) => {
           const [token, balance] = balanceEntry;
           const maxRate = Object
             .values(this.TOKEN_SWAP_RATES)
             .reduce((maxRate, rates) => {
+              console.log(maxRate);
               const convTokenRate = this.BigNumber.from(rates[token]);
+              console.log(convTokenRate);
               return maxRate.gt(convTokenRate) ? maxRate : convTokenRate;
             }, this.BigNumber.from(0));
 
           // add total value of current token at max rate to running wallet total
           return maxWalletValue.add(maxRate.mul(balance));
-        }, this.BigNumber.from(0));
+        }, 0);
   }
 
   async run () {
     // populate token swap rates
-    await populateTokenSwapRates();
+    await this.populateTokenSwapRates();
 
     // return max wallet value result
-    this.RESULT = computeMaxWalletValue();
+    this.RESULT = this.computeMaxWalletValue();
   }
 
 }
 
-const AssignmentOne = new Assignment();
-AssignmentOne.initialize();
-AssignmentOne.run();
 
-Assignment.RESULT;
+(async () => {
+  const AssignmentOne = new Assignment();
+  await AssignmentOne.initialize();
+  await AssignmentOne.run();
+
+  console.log(Assignment.RESULT);
+})();

@@ -1,4 +1,5 @@
-const { API_1inch } = require('constants');
+const { API_1inch } = require('./constants');
+const fetch = require('node-fetch');
 
 const helpers = {
 
@@ -33,4 +34,4 @@ const helpers = {
 
 }
 
-module.exports = { helpers };
+module.exports = helpers;
