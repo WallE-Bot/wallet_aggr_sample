@@ -5,7 +5,7 @@ const { fetchRate1Inch, fetchRateDEX } = require('./helpers');
 const { ADDRESS } = require('./address');
 const { INFURA } = require('./key');
 const { CONTRACT_NAMES, TOKEN_NAMES } = require('./constants');
-const { ethers } = require('ethers');
+const { ethers, aBigNumberish } = require('ethers');
 
 class Assignment {
 
@@ -50,7 +50,7 @@ class Assignment {
     // initialize Web3 instance
     this.web3Provider = new Web3.providers.HttpProvider(INFURA);
     this.web3 = new Web3(this.web3Provider);
-    this.BigNumber = ethers.BigNumber.from(aBigNumberish);
+    this.BigNumber = ethers.BigNumber;
 
     // initialize contracts
     this.CONTRACTS = CONTRACT_NAMES.reduce((contracts, name) => {
@@ -154,12 +154,13 @@ class Assignment {
           const maxRate = Object
             .values(this.TOKEN_SWAP_RATES)
             .reduce((maxRate, rates) => {
-              return maxRate > rates[token] ? maxRate : rates[token];
-            }, );
+              const convTokenRate = this.BigNumber.from(rates[token]);
+              return maxRate.gt(convTokenRate) ? maxRate : convTokenRate;
+            }, this.BigNumber.from(0));
 
           // add total value of current token at max rate to running wallet total
-          return maxWalletValue + (maxRate * balance);
-        }, 0);
+          return maxWalletValue.add(maxRate.mul(balance));
+        }, this.BigNumber.from(0));
   }
 
   async run () {
